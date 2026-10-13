@@ -395,7 +395,7 @@
   function songHTML(s, random) {
     const g = genreOf(s.g);
     const yt = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(`${s.t} ${s.a} 노래방`);
-    const melon = 'https://www.melon.com/search/total/index.htm?q=' + encodeURIComponent(`${s.a} ${s.t}`);
+    const ytm = 'https://music.youtube.com/search?q=' + encodeURIComponent(`${s.t} ${s.a}`);
     return `<div class="big-art">${art(s.art, 600, s.a, s.t[0], true)}</div>
       <h3>${esc(s.t)}</h3>
       <div class="who">${s.names.map(n => `<button data-artist="${esc(n)}">${esc(n)}</button>`).join(' & ')}</div>
@@ -406,7 +406,7 @@
         <button class="act fav${s.fav ? ' on' : ''}" data-fav="${s.id}">${s.fav ? '★ 찜했어요' : '☆ 찜하기'}</button>
         <button class="act lastb${s.last ? ' on' : ''}" data-last="${s.id}">${s.last ? '🏁 막곡 ✓' : '🏁 막곡 담기'}</button>
         <a class="act yt" href="${yt}" target="_blank" rel="noopener">▶ 노래방 영상</a>
-        <a class="act" href="${melon}" target="_blank" rel="noopener">🎵 멜론</a>
+        <a class="act ytm" href="${ytm}" target="_blank" rel="noopener">🎵 유튜브 뮤직</a>
         ${random ? `<button class="act wide" data-reroll>🎲 다시 뽑기</button>` : ''}
       </div>
       <button class="edit-link" data-edit="${s.id}">✏️ 정보 수정</button>`;
