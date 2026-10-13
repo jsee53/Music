@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KONO NOTE</title>
+  <meta name="description" content="코노에서 뭐 부르지? 내가 불러본 노래 모음">
+  <meta name="theme-color" content="#0d0818">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="코노노트">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/favicon-64.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg-glow" aria-hidden="true"></div>
+
+  <header class="top">
+    <div class="brand">
+      <h1 class="logo">KONO<span>NOTE</span></h1>
+      <div class="brand-r">
+        <p class="sub"><b id="totalCount">0</b>곡</p>
+        <button id="addBtn" class="hbtn" type="button" aria-label="노래 추가">＋</button>
+        <button id="acctBtn" class="hbtn" type="button" aria-label="로그인">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4"/><path d="M4 20c1.5-4 4.5-5.5 8-5.5s6.5 1.5 8 5.5"/></svg>
+          <i class="dot" hidden></i>
+        </button>
+      </div>
+    </div>
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="제목·가수 검색 (초성 OK: ㅅㄹ)" autocomplete="off" enterkeyhint="search">
+      <button id="clearQ" class="clear" type="button" aria-label="검색어 지우기" hidden>✕</button>
+    </label>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="all" class="on">전체</button>
+      <button role="tab" data-tab="artist">가수</button>
+      <button role="tab" data-tab="genre">장르</button>
+      <button role="tab" data-tab="fav">찜<span id="favCount" class="badge" hidden></span></button>
+      <button role="tab" data-tab="last">막곡<span id="lastCount" class="badge" hidden></span></button>
+      <i class="tab-ink" aria-hidden="true"></i>
+    </nav>
+  </header>
+
+  <main id="main"></main>
+
+  <nav id="indexBar" class="index-bar" aria-hidden="true"></nav>
+
+  <button id="dice" class="dice" type="button" aria-label="랜덤 추천">
+    <span class="dice-ic">🎲</span><span class="dice-tx">뭐 부르지?</span>
+  </button>
+
+  <div id="install" class="install" hidden>
+    <img src="icons/icon-192.png" alt="">
+    <p id="installText">홈 화면에 추가하면 앱처럼 쓸 수 있어요</p>
+    <button id="installBtn" type="button" hidden>설치</button>
+    <button id="installClose" type="button" aria-label="닫기">✕</button>
+  </div>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-dim" data-close></div>
+    <article class="sheet-card" role="dialog" aria-modal="true">
+      <div class="sheet-bg" id="sheetBg"></div>
+      <button class="sheet-x" data-close aria-label="닫기">✕</button>
+      <div class="sheet-body" id="sheetBody"></div>
+    </article>
+  </div>
+
+  <div id="dialog" class="dialog" hidden>
+    <div class="dlg-card" role="alertdialog" aria-modal="true">
+      <h4 id="dlgTitle"></h4>
+      <p id="dlgMsg"></p>
+      <div class="dlg-acts">
+        <button type="button" data-dlg="0">취소</button>
+        <button type="button" data-dlg="1" id="dlgOk" class="ok">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="data/songs.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
