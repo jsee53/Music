@@ -499,3 +499,17 @@ main { touch-action: pan-y; }
 .act.duetb.on { background: rgba(166, 107, 255, .16); border-color: rgba(166, 107, 255, .55); color: #c9a8ff; }
 .act.duetb:not(.on) { background: rgba(255, 255, 255, .08); border: 1px solid var(--line); color: var(--text); }
 .pf-stats { grid-template-columns: repeat(4, 1fr); }
+
+/* ---------- v6: 찜·막곡·듀엣 한 줄 토글 ---------- */
+.toggles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.act.tg {
+  height: 58px; flex-direction: column; gap: 3px; padding: 0 4px;
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--line); color: var(--text);
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.act.tg:active { transform: scale(.95); }
+.act.tg i { font-style: normal; font-size: 19px; line-height: 1; }
+.act.tg span { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.act.tg.fav.on { background: rgba(255, 211, 107, .15); border-color: rgba(255, 211, 107, .55); color: var(--gold); }
+.act.tg.lastb.on { background: rgba(80, 230, 255, .13); border-color: rgba(80, 230, 255, .5); color: var(--cyan); }
+.act.tg.duetb.on { background: rgba(166, 107, 255, .16); border-color: rgba(166, 107, 255, .55); color: #c9a8ff; }

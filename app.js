@@ -509,6 +509,9 @@
   });
 
   // ---------- 노래 상세 ----------
+  // 찜·막곡·듀엣 토글 버튼 내용 (아이콘 + 이름, 담기면 ✓)
+  const TG = { fav: ['☆', '★', '찜'], last: ['🏁', '🏁', '막곡'], duet: ['👥', '👥', '듀엣'] };
+  const tgInner = (f, on) => `<i>${TG[f][on ? 1 : 0]}</i><span>${TG[f][2]}${on ? ' ✓' : ''}</span>`;
   let curSong = null, curRandom = false;
   function songHTML(s, random) {
     const g = genreOf(s.g);
@@ -521,9 +524,11 @@
       <span class="chip" style="--c:${g.color}">${g.emoji} ${esc(s.g)}</span>${s.sung ? '' : '<span class="chip todo">아직 안 불러봄</span>'}
       <div class="acts">
         ${s.sung ? '' : `<button class="act wide sang-big" data-sang="${s.id}">🎤 불렀어요! 전체 노래에 저장</button>`}
-        <button class="act fav${s.fav ? ' on' : ''}" data-fav="${s.id}">${s.fav ? '★ 찜했어요' : '☆ 찜하기'}</button>
-        <button class="act lastb${s.last ? ' on' : ''}" data-last="${s.id}">${s.last ? '🏁 막곡 ✓' : '🏁 막곡 담기'}</button>
-        <button class="act duetb wide${s.duet ? ' on' : ''}" data-duet="${s.id}">${s.duet ? '👥 듀엣곡 ✓' : '👥 듀엣곡 담기'}</button>
+        <div class="toggles">
+          <button class="act tg fav${s.fav ? ' on' : ''}" data-fav="${s.id}">${tgInner('fav', s.fav)}</button>
+          <button class="act tg lastb${s.last ? ' on' : ''}" data-last="${s.id}">${tgInner('last', s.last)}</button>
+          <button class="act tg duetb${s.duet ? ' on' : ''}" data-duet="${s.id}">${tgInner('duet', s.duet)}</button>
+        </div>
         <a class="act yt" href="${yt}" target="_blank" rel="noopener">▶ 노래방 영상</a>
         <a class="act ytm" href="${ytm}" target="_blank" rel="noopener">🎵 유튜브 뮤직</a>
         ${random ? `<button class="act wide" data-reroll>🎲 다시 뽑기</button>` : ''}
@@ -617,15 +622,15 @@
   function paintFlags(s) {
     document.querySelectorAll(`[data-fav="${s.id}"]`).forEach(b => {
       b.classList.toggle('on', s.fav);
-      b.textContent = b.classList.contains('act') ? (s.fav ? '★ 찜했어요' : '☆ 찜하기') : (s.fav ? '★' : '☆');
+      if (b.classList.contains('act')) b.innerHTML = tgInner('fav', s.fav); else b.textContent = s.fav ? '★' : '☆';
     });
     document.querySelectorAll(`[data-last="${s.id}"]`).forEach(b => {
       b.classList.toggle('on', s.last);
-      b.textContent = s.last ? '🏁 막곡 ✓' : '🏁 막곡 담기';
+      b.innerHTML = tgInner('last', s.last);
     });
     document.querySelectorAll(`[data-duet="${s.id}"]`).forEach(b => {
       b.classList.toggle('on', s.duet);
-      b.textContent = s.duet ? '👥 듀엣곡 ✓' : '👥 듀엣곡 담기';
+      b.innerHTML = tgInner('duet', s.duet);
     });
   }
 
