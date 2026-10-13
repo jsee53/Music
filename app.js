@@ -69,9 +69,9 @@
 
   // ---------- 데이터 ----------
   const splitArtists = a => a.split(/\s*(?:&|,)\s*/).filter(Boolean);
-  const plain = s => ({ id: s.id, t: s.t, a: s.a, g: s.g, art: s.art || null, al: s.al || null, y: s.y || null, sung: s.sung, fav: s.fav, last: s.last });
-  const fromRow = r => ({ id: r.id, t: r.title, a: r.artist, g: r.genre, art: r.art, al: r.album, y: r.year, sung: r.sung, fav: r.fav, last: r.last_song });
-  const COL = { t: 'title', a: 'artist', g: 'genre', art: 'art', al: 'album', y: 'year', sung: 'sung', fav: 'fav', last: 'last_song' };
+  const plain = s => ({ id: s.id, t: s.t, a: s.a, g: s.g, art: s.art || null, al: s.al || null, y: s.y || null, sung: s.sung, fav: s.fav, last: s.last, duet: !!s.duet });
+  const fromRow = r => ({ id: r.id, t: r.title, a: r.artist, g: r.genre, art: r.art, al: r.album, y: r.year, sung: r.sung, fav: r.fav, last: r.last_song, duet: !!r.duet });
+  const COL = { t: 'title', a: 'artist', g: 'genre', art: 'art', al: 'album', y: 'year', sung: 'sung', fav: 'fav', last: 'last_song', duet: 'duet' };
   function toRow(fields) {
     const row = {};
     for (const k in fields) if (COL[k]) row[COL[k]] = fields[k] === undefined ? null : fields[k];
@@ -169,7 +169,7 @@
       <button class="hit" data-song="${s.id}">
         <div class="thumb">${art(s.art, 120, s.a, s.t[0])}</div>
         <div class="meta">
-          <div class="t">${hl(s.t, m && m.t)}${s.last ? '<span class="flag" title="막곡">🏁</span>' : ''}</div>
+          <div class="t">${hl(s.t, m && m.t)}${s.last ? '<span class="flag" title="막곡">🏁</span>' : ''}${s.duet ? '<span class="flag" title="듀엣">👥</span>' : ''}</div>
           <div class="a">${hl(s.a, m && m.a)}<span class="chip" style="--c:${g.color}">${esc(s.g)}</span>${s.sung ? '' : '<span class="chip todo">안 불러봄</span>'}</div>
         </div>
       </button>
@@ -229,16 +229,19 @@
     }).join('')}</div>`;
   }
 
-  // 찜 / 막곡: 안 불러본 노래(도전 예정)와 불러본 노래를 나눠서
+  // 찜 / 막곡 / 듀엣: 안 불러본 노래(도전 예정)와 불러본 노래를 나눠서
+  const PICKED = {
+    fav: { icon: '☆', title: '찜한 노래', empty: '아직 찜한 노래가 없어요.<br>별을 누르거나 ＋ 로 부르고 싶은 노래를 추가해 보세요.' },
+    last: { icon: '🏁', title: '막곡 후보', empty: '막곡 후보가 없어요.<br>노래를 눌러 <b>🏁 막곡</b> 버튼으로 담거나 ＋ 로 추가해 보세요.' },
+    duet: { icon: '👥', title: '듀엣곡', empty: '듀엣곡이 없어요.<br>노래를 눌러 <b>👥 듀엣곡</b> 버튼으로 담거나 ＋ 로 추가해 보세요.' },
+  };
   function viewPicked(flag) {
     const songs = SONGS.filter(s => s[flag]);
-    const isFav = flag === 'fav';
-    if (!songs.length) return `<div class="empty"><span class="big">${isFav ? '☆' : '🏁'}</span>${isFav
-      ? '아직 찜한 노래가 없어요.<br>별을 누르거나 ＋ 로 부르고 싶은 노래를 추가해 보세요.'
-      : '막곡 후보가 없어요.<br>노래를 눌러 <b>🏁 막곡</b> 버튼으로 담거나 ＋ 로 추가해 보세요.'}
+    const P = PICKED[flag];
+    if (!songs.length) return `<div class="empty"><span class="big">${P.icon}</span>${P.empty}
       <br><button class="mini" data-add="${flag}" style="margin-top:14px">＋ 노래 추가</button></div>`;
     const todo = songs.filter(s => !s.sung), done = songs.filter(s => s.sung);
-    let html = `<div class="toolbar"><span>${isFav ? '찜한 노래' : '막곡 후보'} ${songs.length}곡</span>
+    let html = `<div class="toolbar"><span>${P.title} ${songs.length}곡</span>
       <button class="mini" data-add="${flag}">＋ 추가</button></div>`;
     if (todo.length) html += `<h2 class="sec-h">🎯 아직 안 불러봄<small>${todo.length}</small></h2>${list(todo)}`;
     if (done.length) html += `<h2 class="sec-h">🎤 불러봤어요<small>${done.length}</small></h2>${list(done)}`;
@@ -309,7 +312,7 @@
     let html;
     if (state.drill) html = viewDrill();
     else if (state.q) html = viewSearch();
-    else html = { all: viewAll, artist: viewArtists, genre: viewGenres, fav: () => viewPicked('fav'), last: () => viewPicked('last') }[state.tab]();
+    else html = { all: viewAll, artist: viewArtists, genre: viewGenres, fav: () => viewPicked('fav'), last: () => viewPicked('last'), duet: () => viewPicked('duet') }[state.tab]();
     main.innerHTML = `<div class="view">${html}</div>`;
     document.querySelectorAll('.tabs button').forEach((b, i) => {
       const on = b.dataset.tab === state.tab;
@@ -320,6 +323,8 @@
   }
   function paintCounts() {
     $('#totalCount').textContent = sung().length;
+    const du = SONGS.filter(s => s.duet).length, dc = $('#duetCount');
+    dc.hidden = !du; dc.textContent = du;
     const f = SONGS.filter(s => s.fav).length, l = SONGS.filter(s => s.last).length;
     const fc = $('#favCount'), lc = $('#lastCount');
     fc.hidden = !f; fc.textContent = f;
@@ -518,6 +523,7 @@
         ${s.sung ? '' : `<button class="act wide sang-big" data-sang="${s.id}">🎤 불렀어요! 전체 노래에 저장</button>`}
         <button class="act fav${s.fav ? ' on' : ''}" data-fav="${s.id}">${s.fav ? '★ 찜했어요' : '☆ 찜하기'}</button>
         <button class="act lastb${s.last ? ' on' : ''}" data-last="${s.id}">${s.last ? '🏁 막곡 ✓' : '🏁 막곡 담기'}</button>
+        <button class="act duetb wide${s.duet ? ' on' : ''}" data-duet="${s.id}">${s.duet ? '👥 듀엣곡 ✓' : '👥 듀엣곡 담기'}</button>
         <a class="act yt" href="${yt}" target="_blank" rel="noopener">▶ 노래방 영상</a>
         <a class="act ytm" href="${ytm}" target="_blank" rel="noopener">🎵 유튜브 뮤직</a>
         ${random ? `<button class="act wide" data-reroll>🎲 다시 뽑기</button>` : ''}
@@ -540,6 +546,7 @@
     if (state.q) { const r = search(state.q); if (r && r.hits.length) return r.hits; }
     if (state.tab === 'fav') { const p = SONGS.filter(s => s.fav); if (p.length) return p; }
     if (state.tab === 'last') { const p = SONGS.filter(s => s.last); if (p.length) return p; }
+    if (state.tab === 'duet') { const p = SONGS.filter(s => s.duet); if (p.length) return p; }
     return sung();
   }
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -573,11 +580,11 @@
     if (!live) { toast('서버 목록을 아직 못 불러왔어요. 인터넷 연결을 확인해 주세요'); return false; }
     return true;
   }
-  const errMsg = e => (e && e.message) ? e.message : '알 수 없는 오류';
+  const errMsg = e => /duet/.test((e && e.message) || '') ? 'supabase/duet.sql 을 먼저 실행해 주세요' : (e && e.message) ? e.message : '알 수 없는 오류';
 
   function afterChange(structural) {
     reindex(); saveCache();
-    if (structural || state.tab === 'fav' || state.tab === 'last' || state.q) render();
+    if (structural || state.tab === 'fav' || state.tab === 'last' || state.tab === 'duet' || state.q) render();
     else paintCounts();
   }
 
@@ -616,19 +623,23 @@
       b.classList.toggle('on', s.last);
       b.textContent = s.last ? '🏁 막곡 ✓' : '🏁 막곡 담기';
     });
+    document.querySelectorAll(`[data-duet="${s.id}"]`).forEach(b => {
+      b.classList.toggle('on', s.duet);
+      b.textContent = s.duet ? '👥 듀엣곡 ✓' : '👥 듀엣곡 담기';
+    });
   }
 
   async function toggleFlag(s, flag) {
     if (!canEdit()) return;
     const next = !s[flag];
-    const other = flag === 'fav' ? s.last : s.fav;
+    const other = ['fav', 'last', 'duet'].some(f => f !== flag && s[f]);
     if (!next && !s.sung && !other) {
-      const ok = await ask('목록에서 지울까요?', `‘${s.t}’는 아직 안 불러본 노래라서, ${flag === 'fav' ? '찜' : '막곡'}에서 빼면 앱에서 사라져요.`, '지우기');
+      const ok = await ask('목록에서 지울까요?', `‘${s.t}’는 아직 안 불러본 노래라서, ${FLAG_NAME[flag]}에서 빼면 앱에서 사라져요.`, '지우기');
       if (!ok) return;
       if (await removeSong(s)) { if (sheetOpen && sheetMode === 'song' && curSong === s) closeSheet(); toast('지웠어요'); }
       return;
     }
-    if (await patch(s, { [flag]: next })) toast(next ? (flag === 'fav' ? '찜했어요 ★' : '막곡에 담았어요 🏁') : (flag === 'fav' ? '찜 해제' : '막곡에서 뺐어요'));
+    if (await patch(s, { [flag]: next })) toast(next ? { fav: '찜했어요 ★', last: '막곡에 담았어요 🏁', duet: '듀엣곡에 담았어요 👥' }[flag] : { fav: '찜 해제', last: '막곡에서 뺐어요', duet: '듀엣곡에서 뺐어요' }[flag]);
   }
 
   async function markSung(s) {
@@ -662,6 +673,7 @@
         <label><input type="checkbox" name="sung"${form.dest.sung ? ' checked' : ''}><i>🎤 불러봤어요<small>전체 노래</small></i></label>
         <label><input type="checkbox" name="fav"${form.dest.fav ? ' checked' : ''}><i>☆ 찜</i></label>
         <label><input type="checkbox" name="last"${form.dest.last ? ' checked' : ''}><i>🏁 막곡</i></label>
+        <label><input type="checkbox" name="duet"${form.dest.duet ? ' checked' : ''}><i>👥 듀엣</i></label>
       </div><p class="hint">안 불러본 노래는 찜·막곡에만 담아두고, 부른 뒤에 “불렀어요”를 누르면 전체에 저장돼요.</p></div>`}
       <button class="act wide submit" type="submit">${edit ? '저장' : '추가하기'}</button>
       ${edit ? `<button type="button" class="danger" data-del="${s.id}">이 노래 삭제</button>` : ''}
@@ -679,7 +691,7 @@
     if (!f) return;
     form.t = f.t.value; form.a = f.a.value;
     const g = f.querySelector('input[name="g"]:checked'); if (g) form.g = g.value;
-    if (f.sung) form.dest = { sung: f.sung.checked, fav: f.fav.checked, last: f.last.checked };
+    if (f.sung) form.dest = { sung: f.sung.checked, fav: f.fav.checked, last: f.last.checked, duet: f.duet.checked };
   }
   function paintForm() { readForm(); $('#sheetBody').innerHTML = formHTML(); }
 
@@ -687,7 +699,7 @@
     if (!canEdit()) return;
     form = { mode, song, art: song ? song.art : null, al: song ? song.al : null, y: song ? song.y : null, results: null, genreTouched: mode === 'edit' };
     if (mode === 'add') {
-      form.dest = { sung: !(ctx === 'fav' || ctx === 'last'), fav: ctx === 'fav', last: ctx === 'last' };
+      form.dest = { sung: !(ctx === 'fav' || ctx === 'last' || ctx === 'duet'), fav: ctx === 'fav', last: ctx === 'last', duet: ctx === 'duet' };
       if (ctx === 'search') form.t = state.q;
     }
     if (sheetOpen && (sheetMode === 'song' || sheetMode === 'pick')) {
@@ -698,7 +710,7 @@
 
   // ---------- 찜/막곡에 담을 노래 고르기 (저장된 노래에서 검색) ----------
   let picker = null; // { flag, q }
-  const FLAG_NAME = { fav: '찜', last: '막곡' };
+  const FLAG_NAME = { fav: '찜', last: '막곡', duet: '듀엣곡' };
   function pickRows() {
     const nq = normQuery(picker.q);
     let songs = nq ? SONGS.filter(s => findIn(s.ixT, nq) || findIn(s.ixA, nq)) : SONGS.slice();
@@ -762,12 +774,12 @@
       return;
     }
     const d = form.dest;
-    if (!d.sung && !d.fav && !d.last) { toast('저장할 곳을 하나 이상 골라주세요'); btn.disabled = false; return; }
-    const { data, error } = await sb.from('songs').insert(toRow({ ...fields, sung: d.sung, fav: d.fav, last: d.last })).select().single();
+    if (!d.sung && !d.fav && !d.last && !d.duet) { toast('저장할 곳을 하나 이상 골라주세요'); btn.disabled = false; return; }
+    const { data, error } = await sb.from('songs').insert(toRow({ ...fields, sung: d.sung, fav: d.fav, last: d.last, ...(d.duet ? { duet: true } : {}) })).select().single();
     if (error) { toast('추가 실패: ' + errMsg(error)); btn.disabled = false; return; }
     const s = enrich(fromRow(data));
     SONGS.push(s); afterChange(true);
-    toast(d.sung ? '🎉 전체 노래에 추가했어요' : (d.fav ? '찜에 담았어요' : '막곡에 담았어요'));
+    toast(d.sung ? '🎉 전체 노래에 추가했어요' : (d.fav ? '찜에 담았어요' : d.last ? '막곡에 담았어요' : '듀엣곡에 담았어요'));
     paintSong(s, false);
   }
 
@@ -787,6 +799,7 @@
         <div><b>${sung().length}</b><small>불러본 노래</small></div>
         <div><b>${SONGS.filter(s => s.fav).length}</b><small>찜</small></div>
         <div><b>${SONGS.filter(s => s.last).length}</b><small>막곡</small></div>
+        <div><b>${SONGS.filter(s => s.duet).length}</b><small>듀엣</small></div>
       </div>
       <button class="logout" type="button" data-logout>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
@@ -811,6 +824,7 @@
     if (d.tab) goTab(d.tab);
     else if (d.fav) toggleFlag(BY_ID.get(d.fav), 'fav');
     else if (d.last) toggleFlag(BY_ID.get(d.last), 'last');
+    else if (d.duet) toggleFlag(BY_ID.get(d.duet), 'duet');
     else if (d.sang) markSung(BY_ID.get(d.sang));
     else if (d.song) paintSong(BY_ID.get(d.song), false);
     else if (d.artist) {
@@ -822,8 +836,8 @@
     else if ('back' in d) history.back();
     else if ('dice' in d || t.id === 'dice') roll();
     else if ('reroll' in d) roll();
-    else if (d.add) (d.add === 'fav' || d.add === 'last') ? openPicker(d.add) : openForm('add', null, d.add);
-    else if (t.id === 'addBtn') (state.tab === 'fav' || state.tab === 'last') && !state.q && !state.drill ? openPicker(state.tab) : openForm('add', null, state.tab);
+    else if (d.add) PICKED[d.add] ? openPicker(d.add) : openForm('add', null, d.add);
+    else if (t.id === 'addBtn') PICKED[state.tab] && !state.q && !state.drill ? openPicker(state.tab) : openForm('add', null, state.tab);
     else if (d.newsong) openForm('add', null, d.newsong);
     else if (d.pickadd) {
       const s = BY_ID.get(d.pickadd);
@@ -958,7 +972,7 @@
   // ---------- 시작 ----------
   const cached = sb ? LS.get('kono.cache', null) : null;
   if (cached && cached.length) { setData(cached); live = true; }
-  else setData((window.SONGS || []).map((s, i) => ({ id: 's' + i, ...s, sung: true, fav: false, last: false })));
+  else setData((window.SONGS || []).map((s, i) => ({ id: 's' + i, ...s, sung: true, fav: false, last: false, duet: false })));
 
   history.replaceState(snapshot(), '');
   measureHeader();
