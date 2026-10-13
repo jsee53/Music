@@ -21,8 +21,13 @@
 3. **Authentication → Sign In / Providers**에서 *Allow new users to sign up*을 꺼요. 다른 사람이 가입하지 못하게 하는 설정이에요.
 4. **SQL Editor**에서 [`supabase/schema.sql`](supabase/schema.sql)의 `OWNER_EMAIL` 4군데를 2번의 이메일로 바꾼 뒤 실행해요.
 5. 이어서 [`supabase/seed.sql`](supabase/seed.sql)을 실행해요. 지금까지 불러본 노래 476곡이 들어가요.
-6. **Project Settings → API**에서 *Project URL*과 *anon / publishable key*를 복사해 [`config.js`](config.js)에 넣어요.
-   - service_role(secret) 키는 절대 넣지 마세요.
+6. 아래 두 값을 복사해 [`config.js`](config.js)에 넣어요.
+   - **Project URL** (`https://xxxx.supabase.co`): 프로젝트 첫 화면 위쪽 **Connect** 버튼, 또는 **Project Settings → Data API**에 있어요.
+     못 찾으면 **Project Settings → General**의 *Project ID*로 `https://<Project ID>.supabase.co`를 만들면 돼요.
+   - **공개용 키**: **Project Settings → API Keys**의 *Publishable key* (`sb_publishable_...`)를 써요.
+     *Legacy API Keys* 탭의 *anon public* 키(`eyJ...`)도 돼요.
+   - ⚠️ *Secret key* (`sb_secret_...`)나 *service_role* 키는 절대 넣지 마세요.
+     권한 검사를 무시하는 관리자 키라서, 공개되면 누구나 DB를 바꿀 수 있어요. 실수로 올렸다면 같은 화면에서 바로 재발급하세요.
 7. 사이트 오른쪽 위 👤 → 로그인. 한 번 로그인하면 그 기기에서는 계속 유지돼요.
 
 ## 폰에 설치하기
