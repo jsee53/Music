@@ -390,6 +390,106 @@
     if (!fromPop) history.back();
   }
 
+  // ---------- 탭 이동 ----------
+  const TABS = [...document.querySelectorAll('.tabs [data-tab]')].map(b => b.dataset.tab);
+  function goTab(tab, dir) {
+    if (!dir) dir = TABS.indexOf(tab) >= TABS.indexOf(state.tab) ? 1 : -1;
+    state.drill = null;
+    state.tab = tab;
+    if (state.q) { state.q = ''; qInput.value = ''; clearBtn.hidden = true; }
+    history.replaceState(snapshot(), '');
+    render(); window.scrollTo(0, 0);
+    const v = main.querySelector('.view');
+    if (v) v.classList.add(dir > 0 ? 'from-right' : 'from-left');
+  }
+
+  // ---------- 터치 제스처 ----------
+  // 좌우 스와이프: 탭 이동 (가수/장르 상세에서는 오른쪽으로 밀면 뒤로)
+  let sw = null;
+  main.addEventListener('touchstart', e => {
+    const p = e.touches[0];
+    // 화면 가장자리는 안드로이드 '뒤로' 제스처 영역이라 무시
+    if (e.touches.length > 1 || sheetOpen || p.clientX < 24 || p.clientX > innerWidth - 24) { sw = null; return; }
+    sw = { x: p.clientX, y: p.clientY, t: Date.now(), axis: null, view: main.querySelector('.view') };
+  }, { passive: true });
+  main.addEventListener('touchmove', e => {
+    if (!sw) return;
+    const p = e.touches[0], dx = p.clientX - sw.x, dy = p.clientY - sw.y;
+    if (!sw.axis && Math.hypot(dx, dy) > 10) sw.axis = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y';
+    if (sw.axis !== 'x' || !sw.view) return;
+    const atEdge = !state.drill && !state.q && ((dx > 0 && TABS.indexOf(state.tab) === 0) || (dx < 0 && TABS.indexOf(state.tab) === TABS.length - 1));
+    const k = (state.q || atEdge || (state.drill && dx < 0)) ? .12 : .35;
+    sw.view.style.transition = 'none';
+    sw.view.style.transform = `translateX(${dx * k}px)`;
+    sw.view.style.opacity = String(1 - Math.min(Math.abs(dx) / innerWidth, .5) * .6);
+  }, { passive: true });
+  main.addEventListener('touchend', e => {
+    if (!sw) return;
+    const s = sw; sw = null;
+    const p = e.changedTouches[0], dx = p.clientX - s.x, dy = p.clientY - s.y, dt = Date.now() - s.t;
+    const reset = () => {
+      if (!s.view) return;
+      s.view.style.transition = 'transform .2s, opacity .2s';
+      s.view.style.transform = ''; s.view.style.opacity = '';
+    };
+    const fling = s.axis === 'x' && Math.abs(dx) > Math.abs(dy) * 1.4 && (Math.abs(dx) > innerWidth * .28 || (Math.abs(dx) > 50 && dt < 350));
+    if (!fling || state.q) return reset();
+    if (state.drill) return dx > 0 ? history.back() : reset();
+    const i = TABS.indexOf(state.tab) + (dx < 0 ? 1 : -1);
+    if (i < 0 || i >= TABS.length) return reset();
+    goTab(TABS[i], dx < 0 ? 1 : -1);
+  });
+  main.addEventListener('touchcancel', () => {
+    if (sw && sw.view) { sw.view.style.transform = ''; sw.view.style.opacity = ''; }
+    sw = null;
+  });
+
+  // 시트 아래로 끌어내리기: 닫기
+  const card = $('.sheet-card'), dim = $('.sheet-dim');
+  let dr = null;
+  card.addEventListener('touchstart', e => {
+    if (e.touches.length > 1) return;
+    const onGrab = e.target.closest('.sheet-grab');
+    // 폼 입력 중이거나 내용이 스크롤된 상태면 끌기 대신 스크롤
+    if (!onGrab && (card.scrollTop > 0 || e.target.closest('input, textarea, .art-results'))) { dr = null; return; }
+    dr = { y: e.touches[0].clientY, t: Date.now(), dy: 0, active: false };
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (!dr) return;
+    const dy = e.touches[0].clientY - dr.y;
+    if (!dr.active) {
+      if (dy < -4) { dr = null; return; } // 위로 밀면 평소처럼 스크롤
+      if (dy < 8) return;
+      dr.active = true;
+    }
+    e.preventDefault();
+    dr.dy = Math.max(0, dy);
+    card.style.animation = 'none';
+    card.style.transition = 'none';
+    card.style.transform = `translateY(${dr.dy}px)`;
+    dim.style.opacity = String(1 - Math.min(dr.dy / card.offsetHeight, 1));
+  }, { passive: false });
+  card.addEventListener('touchend', () => {
+    if (!dr) return;
+    const d = dr; dr = null;
+    if (!d.active) return;
+    const v = d.dy / Math.max(Date.now() - d.t, 1);
+    if (d.dy > Math.min(140, card.offsetHeight * .3) || (d.dy > 40 && v > .6)) {
+      card.style.transition = 'transform .2s ease';
+      card.style.transform = 'translateY(100%)';
+      dim.style.transition = 'opacity .2s'; dim.style.opacity = '0';
+      setTimeout(() => {
+        closeSheet();
+        setTimeout(() => { card.style.cssText = ''; dim.style.cssText = ''; }, 220);
+      }, 190);
+    } else {
+      card.style.transition = 'transform .25s cubic-bezier(.2,.9,.3,1)';
+      card.style.transform = '';
+      dim.style.transition = 'opacity .25s'; dim.style.opacity = '';
+      setTimeout(() => { card.style.cssText = ''; dim.style.cssText = ''; }, 260);
+    }
+  });
+
   // ---------- 노래 상세 ----------
   let curSong = null, curRandom = false;
   function songHTML(s, random) {
@@ -512,7 +612,7 @@
     if (!next && !s.sung && !other) {
       const ok = await ask('목록에서 지울까요?', `‘${s.t}’는 아직 안 불러본 노래라서, ${flag === 'fav' ? '찜' : '막곡'}에서 빼면 앱에서 사라져요.`, '지우기');
       if (!ok) return;
-      if (await removeSong(s)) { if (sheetOpen && curSong === s) closeSheet(); toast('지웠어요'); }
+      if (await removeSong(s)) { if (sheetOpen && sheetMode === 'song' && curSong === s) closeSheet(); toast('지웠어요'); }
       return;
     }
     if (await patch(s, { [flag]: next })) toast(next ? (flag === 'fav' ? '찜했어요 ★' : '막곡에 담았어요 🏁') : (flag === 'fav' ? '찜 해제' : '막곡에서 뺐어요'));
@@ -577,11 +677,45 @@
       form.dest = { sung: !(ctx === 'fav' || ctx === 'last'), fav: ctx === 'fav', last: ctx === 'last' };
       if (ctx === 'search') form.t = state.q;
     }
-    if (sheetOpen && sheetMode === 'song') {
+    if (sheetOpen && (sheetMode === 'song' || sheetMode === 'pick')) {
       sheetMode = 'form'; $('#sheetBody').className = 'sheet-body form'; $('#sheetBg').style.cssText = 'display:none';
       $('#sheetBody').innerHTML = formHTML(); $('.sheet-card').scrollTop = 0;
     } else showSheet(formHTML(), '', 'form');
   }
+
+  // ---------- 찜/막곡에 담을 노래 고르기 (저장된 노래에서 검색) ----------
+  let picker = null; // { flag, q }
+  const FLAG_NAME = { fav: '찜', last: '막곡' };
+  function pickRows() {
+    const nq = normQuery(picker.q);
+    let songs = nq ? SONGS.filter(s => findIn(s.ixT, nq) || findIn(s.ixA, nq)) : SONGS.slice();
+    songs.sort((x, y) => (y.sung - x.sung) || cmpName(x.t, y.t));
+    const more = songs.length > 80 ? songs.length - 80 : 0;
+    songs = songs.slice(0, 80);
+    if (!songs.length) return `<p class="hint pick-empty">“${esc(picker.q)}”에 해당하는 노래가 없어요. 아래에서 새 노래로 추가할 수 있어요.</p>`;
+    return songs.map(s => {
+      const on = s[picker.flag];
+      return `<li class="row">
+        <div class="thumb">${art(s.art, 120, s.a, s.t[0])}</div>
+        <div class="meta"><div class="t">${esc(s.t)}</div><div class="a">${esc(s.a)}${s.sung ? '' : '<span class="chip todo">안 불러봄</span>'}</div></div>
+        <button class="pickadd${on ? ' on' : ''}" data-pickadd="${s.id}">${on ? '담김 ✓' : '＋ 담기'}</button>
+      </li>`;
+    }).join('') + (more ? `<p class="hint pick-empty">${more}곡 더 있어요. 검색어를 입력해 좁혀보세요.</p>` : '');
+  }
+  function openPicker(flag) {
+    if (!canEdit()) return;
+    picker = { flag, q: '' };
+    showSheet(`<div class="picker">
+      <h3 class="form-h">${FLAG_NAME[flag]}에 노래 담기</h3>
+      <label class="search pick-q">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="pickQ" type="search" placeholder="저장된 노래에서 찾기 (초성 OK)" autocomplete="off" enterkeyhint="search">
+      </label>
+      <ul class="list" id="pickList">${pickRows()}</ul>
+      <button class="act wide" type="button" data-newsong="${flag}">＋ 목록에 없는 새 노래 추가</button>
+    </div>`, '', 'pick');
+  }
+  function paintPicker() { const ul = $('#pickList'); if (ul) ul.innerHTML = pickRows(); }
 
   async function findArt() {
     readForm();
@@ -645,13 +779,7 @@
     const t = e.target.closest('button, [data-close]');
     if (!t || t.closest('#dialog')) return;
     const d = t.dataset;
-    if (d.tab) {
-      state.drill = null;
-      state.tab = d.tab;
-      if (state.q) { state.q = ''; qInput.value = ''; clearBtn.hidden = true; }
-      history.replaceState(snapshot(), '');
-      render(); window.scrollTo(0, 0);
-    }
+    if (d.tab) goTab(d.tab);
     else if (d.fav) toggleFlag(BY_ID.get(d.fav), 'fav');
     else if (d.last) toggleFlag(BY_ID.get(d.last), 'last');
     else if (d.sang) markSung(BY_ID.get(d.sang));
@@ -665,8 +793,14 @@
     else if ('back' in d) history.back();
     else if ('dice' in d || t.id === 'dice') roll();
     else if ('reroll' in d) roll();
-    else if (d.add) openForm('add', null, d.add);
-    else if (t.id === 'addBtn') openForm('add', null, state.tab);
+    else if (d.add) (d.add === 'fav' || d.add === 'last') ? openPicker(d.add) : openForm('add', null, d.add);
+    else if (t.id === 'addBtn') (state.tab === 'fav' || state.tab === 'last') && !state.q && !state.drill ? openPicker(state.tab) : openForm('add', null, state.tab);
+    else if (d.newsong) openForm('add', null, d.newsong);
+    else if (d.pickadd) {
+      const s = BY_ID.get(d.pickadd);
+      t.disabled = true;
+      toggleFlag(s, picker.flag).then(() => { if (sheetMode === 'pick') paintPicker(); });
+    }
     else if (t.id === 'acctBtn') openLogin();
     else if (d.edit) openForm('edit', BY_ID.get(d.edit));
     else if ('findart' in d) findArt();
@@ -702,6 +836,7 @@
 
   // 가수 입력하면 그 가수의 주 장르를 자동 선택
   document.addEventListener('input', e => {
+    if (e.target.id === 'pickQ') { picker.q = e.target.value; paintPicker(); $('.sheet-card').scrollTop = 0; return; }
     if (!form || e.target.name === undefined) return;
     if (e.target.name === 'g') form.genreTouched = true;
     if (e.target.name === 'a' && !form.genreTouched) {

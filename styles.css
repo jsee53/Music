@@ -414,3 +414,30 @@ mark { background: none; color: var(--cyan); }
   animation: fadeUp .25s ease; text-align: center;
 }
 .toast[hidden] { display: none; }
+
+/* ---------- v3: 터치 제스처 ---------- */
+main { touch-action: pan-y; }
+.view.from-right { animation: inRight .26s cubic-bezier(.2, .8, .3, 1) both; }
+.view.from-left { animation: inLeft .26s cubic-bezier(.2, .8, .3, 1) both; }
+@keyframes inRight { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: none; } }
+@keyframes inLeft { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+
+.sheet-card { overscroll-behavior: contain; padding-top: 30px; }
+.sheet-grab {
+  position: absolute; top: 0; left: 0; right: 0; height: 30px; z-index: 2;
+  display: grid; place-items: center; touch-action: none; cursor: grab;
+}
+.sheet-grab i { width: 42px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .3); }
+
+/* ---------- v3: 찜/막곡 담기 ---------- */
+.sheet-body.pick { text-align: left; }
+.picker .pick-q { margin: 0 0 8px; position: sticky; top: -30px; z-index: 3; background: #251838; }
+.picker .list { margin-bottom: 14px; }
+.picker .row { padding-right: 0; }
+.pickadd {
+  flex: none; height: 32px; min-width: 70px; padding: 0 12px; border-radius: 16px; font-size: 12.5px; font-weight: 700;
+  background: linear-gradient(90deg, var(--pink), var(--violet)); color: #fff;
+}
+.pickadd.on { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.pickadd:disabled { opacity: .5; }
+.pick-empty { padding: 16px 4px; text-align: center; }
