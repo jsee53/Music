@@ -1,6 +1,6 @@
 // 앱 파일은 네트워크 우선(업데이트 바로 반영), 오프라인이면 캐시 사용.
 // 앨범 아트·폰트는 캐시 우선.
-const VERSION = 'v7';
+const VERSION = 'v9';
 const APP = `kono-app-${VERSION}`;
 const MEDIA = 'kono-media';
 const SHELL = ['./', 'index.html', 'config.js', 'styles.css', 'app.js', 'data/songs.js', 'manifest.webmanifest',

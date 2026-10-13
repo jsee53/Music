@@ -107,6 +107,11 @@
 
   // ---------- 상태 ----------
   const state = { tab: 'all', drill: null, q: '', artistSort: LS.get('kono.artistSort2', 'count') };
+  // 앱 정보 (마지막 업데이트 날짜 등) — 서버 meta 테이블, 없으면 마지막으로 받은 값
+  let meta = LS.get('kono.meta', { last_update: '2026-10-13' });
+  const pad = n => String(n).padStart(2, '0');
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const fmtDate = v => v ? v.replace(/-/g, '.') : '';
 
   // ---------- DOM ----------
   const $ = s => document.querySelector(s);
@@ -192,7 +197,8 @@
     if (!songs.length) return `<div class="empty"><span class="big">🎤</span>아직 저장된 노래가 없어요.</div>`;
     const { html, keys } = sectioned(songs);
     setIndex(keys);
-    return html;
+    const upd = meta.last_update ? `<div class="upd">🗓️ 마지막 업데이트 <b>${esc(fmtDate(meta.last_update))}</b></div>` : '';
+    return upd + html;
   }
 
   function artistCard(ar) {
@@ -351,7 +357,7 @@
 
   // ---------- 히스토리 (안드로이드 뒤로가기 대응) ----------
   const sheet = $('#sheet');
-  let sheetOpen = false;
+  let sheetOpen = false, skipPop = false;
   const snapshot = () => ({ tab: state.tab, drill: state.drill, y: window.scrollY });
   function openDrill(d) {
     history.replaceState(snapshot(), '');
@@ -360,6 +366,7 @@
     render(); window.scrollTo(0, 0);
   }
   window.addEventListener('popstate', e => {
+    if (skipPop) { skipPop = false; return; } // 시트를 닫으며 생긴 뒤로가기: 화면 그대로
     if (sheetOpen) { closeSheet(true); return; }
     const st = e.state || {};
     state.tab = st.tab || 'all'; state.drill = st.drill || null;
@@ -376,6 +383,7 @@
     $('#sheetBg').style.cssText = bgStyle || 'display:none';
     if (!sheetOpen) {
       sheetOpen = true; sheet.hidden = false; sheet.classList.remove('closing');
+      history.replaceState(snapshot(), ''); // 지금 스크롤 위치 기록
       document.body.style.overflow = 'hidden';
       history.pushState({ ...snapshot(), sheet: true }, '');
     }
@@ -387,18 +395,23 @@
     sheet.classList.add('closing');
     setTimeout(() => { sheet.hidden = true; sheet.classList.remove('closing'); }, 200);
     document.body.style.overflow = '';
-    if (!fromPop) history.back();
+    if (!fromPop) { skipPop = true; history.back(); }
   }
 
   // ---------- 탭 이동 ----------
   const TABS = [...document.querySelectorAll('.tabs [data-tab]')].map(b => b.dataset.tab);
+  const tabScroll = {}; // 탭마다 스크롤 위치 기억
   function goTab(tab, dir) {
+    const plain = !state.drill && !state.q;
+    // 지금 보고 있는 탭을 다시 누르면 맨 위로
+    if (plain && tab === state.tab) { window.scrollTo(0, 0); return; }
+    if (plain) tabScroll[state.tab] = window.scrollY;
     if (!dir) dir = TABS.indexOf(tab) >= TABS.indexOf(state.tab) ? 1 : -1;
     state.drill = null;
     state.tab = tab;
     if (state.q) { state.q = ''; qInput.value = ''; clearBtn.hidden = true; }
+    render(); window.scrollTo(0, tabScroll[tab] || 0);
     history.replaceState(snapshot(), '');
-    render(); window.scrollTo(0, 0);
     const v = main.querySelector('.view');
     if (v) v.classList.add(dir > 0 ? 'from-right' : 'from-left');
   }
@@ -760,9 +773,25 @@
 
   // ---------- 로그인 ----------
   function loginHTML(msg) {
-    if (user) return `<div class="login"><div class="big-ic">🎤</div><h3>로그인됨</h3><p class="hint">${esc(user.email)}</p>
-      <p class="hint">노래 추가·찜·막곡이 서버에 저장돼서 폰을 바꿔도 그대로예요.</p>
-      <button class="act wide" type="button" data-logout>로그아웃</button></div>`;
+    if (user) return `<div class="profile">
+      <div class="pf-head">
+        <div class="pf-av">${esc((user.email || '?')[0].toUpperCase())}</div>
+        <div class="pf-who"><b>내 정보</b><small>${esc(user.email)}</small></div>
+      </div>
+      <label class="pf-row">
+        <span class="pf-ic">🗓️</span>
+        <span class="pf-label">마지막 노래 업데이트<small>탭해서 날짜 선택</small></span>
+        <input type="date" id="lastUpd" value="${esc(meta.last_update || '')}" max="${today()}">
+      </label>
+      <div class="pf-stats">
+        <div><b>${sung().length}</b><small>불러본 노래</small></div>
+        <div><b>${SONGS.filter(s => s.fav).length}</b><small>찜</small></div>
+        <div><b>${SONGS.filter(s => s.last).length}</b><small>막곡</small></div>
+      </div>
+      <button class="logout" type="button" data-logout>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
+        로그아웃
+      </button></div>`;
     if (!sb) return `<div class="login"><div class="big-ic">🔌</div><h3>서버 연결 전</h3>
       <p class="hint">config.js 에 Supabase URL과 키를 넣으면 로그인·저장 기능이 켜져요. 지금은 보기 전용이에요.</p></div>`;
     return `<form id="loginForm" class="login" autocomplete="on"><div class="big-ic">🔐</div><h3>로그인</h3>
@@ -905,8 +934,26 @@
     live = true;
     setData(all.map(fromRow));
     saveCache();
+    const m = await sb.from('meta').select('key,value');
+    if (!m.error) { meta = Object.fromEntries(m.data.map(r => [r.key, r.value])); LS.set('kono.meta', meta); }
     if (!sheetOpen || sheetMode !== 'form') render();
   }
+
+  // ---------- 마지막 업데이트 날짜 ----------
+  async function saveLastUpdate(value) {
+    if (!canEdit() || !value) return;
+    const prev = meta.last_update;
+    meta = { ...meta, last_update: value }; LS.set('kono.meta', meta); render();
+    const { error } = await sb.from('meta').upsert({ key: 'last_update', value });
+    if (error) {
+      meta = { ...meta, last_update: prev }; LS.set('kono.meta', meta); render();
+      const el = $('#lastUpd'); if (el) el.value = prev || '';
+      toast(/meta/.test(error.message || '') ? 'supabase/meta.sql 을 먼저 실행해 주세요' : '저장 실패: ' + errMsg(error));
+      return;
+    }
+    toast(`🗓️ ${fmtDate(value)}로 저장했어요`);
+  }
+  document.addEventListener('change', e => { if (e.target.id === 'lastUpd') saveLastUpdate(e.target.value); });
 
   // ---------- 시작 ----------
   const cached = sb ? LS.get('kono.cache', null) : null;
