@@ -48,6 +48,6 @@
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA (오프라인 캐시, 설치) |
 | `supabase/` | 테이블·권한 SQL, 초기 데이터 |
 
-앱 파일을 고친 뒤 `sw.js`의 `VERSION`을 올리면, 설치된 앱에도 반영돼요.
+앱 파일을 고친 뒤 `sw.js`의 `VERSION`과 `index.html`의 `?v=` 숫자를 같이 올리면, 설치된 앱에도 바로 반영돼요.
 
 앨범 사진과 앨범 정보는 iTunes Search API에서 가져와요.

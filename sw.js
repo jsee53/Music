@@ -1,6 +1,7 @@
 // 앱 파일은 네트워크 우선(업데이트 바로 반영), 오프라인이면 캐시 사용.
+// 브라우저 HTTP 캐시에 옛 파일이 남아 있어도 쓰지 않게 매번 서버에 확인해요(no-cache).
 // 앨범 아트·폰트는 캐시 우선.
-const VERSION = 'v14';
+const VERSION = 'v15';
 const APP = `kono-app-${VERSION}`;
 const MEDIA = 'kono-media';
 const SHELL = ['./', 'index.html', 'config.js', 'styles.css', 'app.js', 'data/songs.js', 'manifest.webmanifest',
@@ -23,7 +24,7 @@ self.addEventListener('fetch', e => {
 
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(APP).then(c => c.put(req, copy)); }
         return res;
       }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
