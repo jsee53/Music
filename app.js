@@ -69,9 +69,9 @@
 
   // ---------- 데이터 ----------
   const splitArtists = a => a.split(/\s*(?:&|,)\s*/).filter(Boolean);
-  const plain = s => ({ id: s.id, t: s.t, a: s.a, g: s.g, art: s.art || null, al: s.al || null, y: s.y || null, sung: s.sung, fav: s.fav, last: s.last, duet: !!s.duet });
-  const fromRow = r => ({ id: r.id, t: r.title, a: r.artist, g: r.genre, art: r.art, al: r.album, y: r.year, sung: r.sung, fav: r.fav, last: r.last_song, duet: !!r.duet });
-  const COL = { t: 'title', a: 'artist', g: 'genre', art: 'art', al: 'album', y: 'year', sung: 'sung', fav: 'fav', last: 'last_song', duet: 'duet' };
+  const plain = s => ({ id: s.id, t: s.t, a: s.a, g: s.g, art: s.art || null, al: s.al || null, y: s.y || null, sung: s.sung });
+  const fromRow = r => ({ id: r.id, t: r.title, a: r.artist, g: r.genre, art: r.art, al: r.album, y: r.year, sung: r.sung });
+  const COL = { t: 'title', a: 'artist', g: 'genre', art: 'art', al: 'album', y: 'year', sung: 'sung' };
   function toRow(fields) {
     const row = {};
     for (const k in fields) if (COL[k]) row[COL[k]] = fields[k] === undefined ? null : fields[k];
@@ -105,8 +105,18 @@
   const sung = () => SONGS.filter(s => s.sung);
   const saveCache = () => { if (live) LS.set('kono.cache', SONGS.map(plain)); };
 
+  // 플레이리스트: [{ id, name, pos, items: [{ sid, pos }] }] — items 는 순서대로
+  let PLS = [], plReady = false; // plReady: 서버에 playlist 테이블이 있는지
+  const plById = id => PLS.find(p => String(p.id) === String(id));
+  const plSongs = p => p.items.map(it => BY_ID.get(it.sid)).filter(Boolean);
+  const inPl = (p, s) => p.items.some(it => it.sid === String(s.id));
+  const plsOf = s => PLS.filter(p => inPl(p, s));
+  const savePls = () => { if (plReady) LS.set('kono.pl', PLS); };
+  // 안 불러봤고 이 플리에만 있는 노래: 플리에서 빠지면 앱에서 안 보여요
+  const onlyIn = (p, s) => !s.sung && plsOf(s).every(x => x === p);
+
   // ---------- 상태 ----------
-  const state = { tab: 'all', drill: null, q: '', artistSort: LS.get('kono.artistSort2', 'count') };
+  const state = { tab: 'all', drill: null, q: '', plEdit: false, artistSort: LS.get('kono.artistSort2', 'count') };
   // 앱 정보 (마지막 업데이트 날짜 등) — 서버 meta 테이블, 없으면 마지막으로 받은 값
   let meta = LS.get('kono.meta', { last_update: '2026-10-13' });
   const pad = n => String(n).padStart(2, '0');
@@ -169,13 +179,19 @@
       <button class="hit" data-song="${s.id}">
         <div class="thumb">${art(s.art, 120, s.a, s.t[0])}</div>
         <div class="meta">
-          <div class="t">${hl(s.t, m && m.t)}${s.last ? '<span class="flag" title="막곡">🏁</span>' : ''}${s.duet ? '<span class="flag" title="듀엣">👥</span>' : ''}</div>
+          <div class="t">${hl(s.t, m && m.t)}</div>
           <div class="a">${hl(s.a, m && m.a)}<span class="chip" style="--c:${g.color}">${esc(s.g)}</span>${s.sung ? '' : '<span class="chip todo">안 불러봄</span>'}</div>
         </div>
       </button>
       ${s.sung ? '' : `<button class="sang" data-sang="${s.id}">불렀어요</button>`}
-      <button class="star${s.fav ? ' on' : ''}" data-fav="${s.id}" aria-label="찜">${s.fav ? '★' : '☆'}</button>
+      ${plBtn(s)}
     </li>`;
+  }
+  // 플리에 담기 버튼: 어느 플리에든 담겨 있으면 ✓
+  const plIcon = on => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11M4 11h11M4 16h7"/>${on ? '<path d="M14 17l2.5 2.5L21 15"/>' : '<path d="M18 13v7M14.5 16.5h7"/>'}</svg>`;
+  function plBtn(s) {
+    const on = plsOf(s).length > 0;
+    return `<button class="plbtn${on ? ' on' : ''}" data-plpick="${s.id}" aria-label="플리에 담기">${plIcon(on)}</button>`;
   }
   const list = (songs, ms) => `<ul class="list">${songs.map(s => row(s, ms && ms.get(s))).join('')}</ul>`;
 
@@ -229,23 +245,50 @@
     }).join('')}</div>`;
   }
 
-  // 찜 / 막곡 / 듀엣: 안 불러본 노래(도전 예정)와 불러본 노래를 나눠서
-  const PICKED = {
-    fav: { icon: '☆', title: '찜한 노래', empty: '아직 찜한 노래가 없어요.<br>별을 누르거나 ＋ 로 부르고 싶은 노래를 추가해 보세요.' },
-    last: { icon: '🏁', title: '막곡 후보', empty: '막곡 후보가 없어요.<br>노래를 눌러 <b>🏁 막곡</b> 버튼으로 담거나 ＋ 로 추가해 보세요.' },
-    duet: { icon: '👥', title: '듀엣곡', empty: '듀엣곡이 없어요.<br>노래를 눌러 <b>👥 듀엣곡</b> 버튼으로 담거나 ＋ 로 추가해 보세요.' },
-  };
-  function viewPicked(flag) {
-    const songs = SONGS.filter(s => s[flag]);
-    const P = PICKED[flag];
-    if (!songs.length) return `<div class="empty"><span class="big">${P.icon}</span>${P.empty}
-      <br><button class="mini" data-add="${flag}" style="margin-top:14px">＋ 노래 추가</button></div>`;
-    const todo = songs.filter(s => !s.sung), done = songs.filter(s => s.sung);
-    let html = `<div class="toolbar"><span>${P.title} ${songs.length}곡</span>
-      <button class="mini" data-add="${flag}">＋ 추가</button></div>`;
-    if (todo.length) html += `<h2 class="sec-h">🎯 아직 안 불러봄<small>${todo.length}</small></h2>${list(todo)}`;
-    if (done.length) html += `<h2 class="sec-h">🎤 불러봤어요<small>${done.length}</small></h2>${list(done)}`;
-    return html;
+  // 플리 커버: 앨범 사진 4장이면 2×2, 아니면 첫 사진, 없으면 색 커버
+  function plCover(p, px) {
+    const arts = plSongs(p).filter(s => s.art).slice(0, 4);
+    if (arts.length === 4) return `<div class="mosaic">${arts.map(s => art(s.art, px / 2, s.a, s.t[0])).join('')}</div>`;
+    if (arts.length) return art(arts[0].art, px, arts[0].a, arts[0].t[0]);
+    const h = hue(p.name);
+    return `<div class="ph" style="background:linear-gradient(135deg,hsl(${h} 75% 55%),hsl(${(h + 50) % 360} 70% 30%))">🎶</div>`;
+  }
+
+  function viewPlaylists() {
+    if (!plReady) return `<div class="empty"><span class="big">🎶</span>플레이리스트를 쓰려면 Supabase SQL Editor 에서<br><b>supabase/playlist.sql</b> 을 한 번 실행해 주세요.</div>`;
+    if (!PLS.length) return `<div class="empty"><span class="big">🎶</span>아직 플레이리스트가 없어요.<br>오늘 부를 노래, 분위기별 묶음을 만들어 보세요.
+      <br><button class="mini" data-plnew style="margin-top:14px">＋ 새 플레이리스트</button></div>`;
+    return `<div class="toolbar"><span>플레이리스트 ${PLS.length}개</span><button class="mini" data-plnew>＋ 새 플리</button></div>
+      <div class="pls">${PLS.map(p => `<button class="plc" data-pl="${p.id}">
+        <div class="plc-cv">${plCover(p, 300)}</div>
+        <div class="n">${esc(p.name)}</div><div class="c">${plSongs(p).length}곡</div></button>`).join('')}</div>`;
+  }
+
+  function plEditRow(s, i, n) {
+    return `<li class="row pl-edit">
+      <div class="thumb">${art(s.art, 120, s.a, s.t[0])}</div>
+      <div class="meta"><div class="t">${esc(s.t)}</div><div class="a">${esc(s.a)}</div></div>
+      <button class="mv" data-plmv="-1" data-sid="${s.id}"${i ? '' : ' disabled'} aria-label="위로">▲</button>
+      <button class="mv" data-plmv="1" data-sid="${s.id}"${i < n - 1 ? '' : ' disabled'} aria-label="아래로">▼</button>
+      <button class="mv rm" data-plrm="${s.id}" aria-label="플리에서 빼기">✕</button>
+    </li>`;
+  }
+
+  function viewPl(p) {
+    const songs = plSongs(p), first = songs.find(s => s.art);
+    let html = hero({
+      title: p.name, sub: `플레이리스트 · ${songs.length}곡`, cover: plCover(p, 300),
+      bg: first ? `background-image:url('${esc(size(first.art, 200))}')` : `background:hsl(${hue(p.name)} 70% 45%)`,
+      pickLabel: '이 플리에서 뽑기',
+    });
+    html += state.plEdit
+      ? `<div class="pl-tools"><button class="mini on" data-plorder>✓ 완료</button>
+          <button class="mini" data-plrename="${p.id}">✏️ 이름 바꾸기</button>
+          <button class="mini warn" data-pldel="${p.id}">🗑 플리 삭제</button></div>`
+      : `<div class="pl-tools"><button class="mini" data-pladd="${p.id}">＋ 노래 담기</button>
+          <button class="mini" data-plorder>편집</button></div>`;
+    if (!songs.length) return html + `<div class="empty">아직 담긴 노래가 없어요.<br><b>＋ 노래 담기</b>로 채워 보세요.</div>`;
+    return html + (state.plEdit ? `<ul class="list">${songs.map((s, i) => plEditRow(s, i, songs.length)).join('')}</ul>` : list(songs));
   }
 
   function hero({ title, sub, cover, round, bg, pickLabel }) {
@@ -259,11 +302,16 @@
 
   function drillSongs(d) {
     if (d.type === 'artist') { const ar = ARTISTS.get(d.key); return ar ? ar.songs : []; }
+    if (d.type === 'pl') { const p = plById(d.key); return p ? plSongs(p) : []; }
     return sung().filter(s => s.g === d.key);
   }
 
   function viewDrill() {
     const d = state.drill;
+    if (d.type === 'pl') {
+      const p = plById(d.key);
+      return p ? viewPl(p) : `<div class="empty"><button class="back" data-back style="position:static;margin:0 auto 16px">‹ 뒤로</button>플레이리스트가 없어요.</div>`;
+    }
     if (d.type === 'artist') {
       const ar = ARTISTS.get(d.key);
       if (!ar) return `<div class="empty"><button class="back" data-back style="position:static;margin:0 auto 16px">‹ 뒤로</button>${esc(d.key)}의 노래가 없어요.</div>`;
@@ -312,7 +360,7 @@
     let html;
     if (state.drill) html = viewDrill();
     else if (state.q) html = viewSearch();
-    else html = { all: viewAll, artist: viewArtists, genre: viewGenres, fav: () => viewPicked('fav'), last: () => viewPicked('last'), duet: () => viewPicked('duet') }[state.tab]();
+    else html = ({ all: viewAll, artist: viewArtists, genre: viewGenres, pl: viewPlaylists }[state.tab] || viewAll)();
     main.innerHTML = `<div class="view">${html}</div>`;
     document.querySelectorAll('.tabs button').forEach((b, i) => {
       const on = b.dataset.tab === state.tab;
@@ -323,12 +371,6 @@
   }
   function paintCounts() {
     $('#totalCount').textContent = sung().length;
-    const du = SONGS.filter(s => s.duet).length, dc = $('#duetCount');
-    dc.hidden = !du; dc.textContent = du;
-    const f = SONGS.filter(s => s.fav).length, l = SONGS.filter(s => s.last).length;
-    const fc = $('#favCount'), lc = $('#lastCount');
-    fc.hidden = !f; fc.textContent = f;
-    lc.hidden = !l; lc.textContent = l;
   }
 
   function measureHeader() {
@@ -366,7 +408,7 @@
   const snapshot = () => ({ tab: state.tab, drill: state.drill, y: window.scrollY });
   function openDrill(d) {
     history.replaceState(snapshot(), '');
-    state.drill = d;
+    state.drill = d; state.plEdit = false;
     history.pushState(snapshot(), '');
     render(); window.scrollTo(0, 0);
   }
@@ -374,7 +416,7 @@
     if (skipPop) { skipPop = false; return; } // 시트를 닫으며 생긴 뒤로가기: 화면 그대로
     if (sheetOpen) { closeSheet(true); return; }
     const st = e.state || {};
-    state.tab = st.tab || 'all'; state.drill = st.drill || null;
+    state.tab = st.tab || 'all'; state.drill = st.drill || null; state.plEdit = false;
     render();
     requestAnimationFrame(() => window.scrollTo(0, st.y || 0));
   });
@@ -412,7 +454,7 @@
     if (plain && tab === state.tab) { window.scrollTo(0, 0); return; }
     if (plain) tabScroll[state.tab] = window.scrollY;
     if (!dir) dir = TABS.indexOf(tab) >= TABS.indexOf(state.tab) ? 1 : -1;
-    state.drill = null;
+    state.drill = null; state.plEdit = false;
     state.tab = tab;
     if (state.q) { state.q = ''; qInput.value = ''; clearBtn.hidden = true; }
     render(); window.scrollTo(0, tabScroll[tab] || 0);
@@ -509,9 +551,6 @@
   });
 
   // ---------- 노래 상세 ----------
-  // 찜·막곡·듀엣 토글 버튼 내용 (아이콘 + 이름, 담기면 ✓)
-  const TG = { fav: ['☆', '★', '찜'], last: ['🏁', '🏁', '막곡'], duet: ['👥', '👥', '듀엣'] };
-  const tgInner = (f, on) => `<i>${TG[f][on ? 1 : 0]}</i><span>${TG[f][2]}${on ? ' ✓' : ''}</span>`;
   let curSong = null, curRandom = false;
   function songHTML(s, random) {
     const g = genreOf(s.g);
@@ -524,11 +563,7 @@
       <span class="chip" style="--c:${g.color}">${g.emoji} ${esc(s.g)}</span>${s.sung ? '' : '<span class="chip todo">아직 안 불러봄</span>'}
       <div class="acts">
         ${s.sung ? '' : `<button class="act wide sang-big" data-sang="${s.id}">🎤 불렀어요! 전체 노래에 저장</button>`}
-        <div class="toggles">
-          <button class="act tg fav${s.fav ? ' on' : ''}" data-fav="${s.id}">${tgInner('fav', s.fav)}</button>
-          <button class="act tg lastb${s.last ? ' on' : ''}" data-last="${s.id}">${tgInner('last', s.last)}</button>
-          <button class="act tg duetb${s.duet ? ' on' : ''}" data-duet="${s.id}">${tgInner('duet', s.duet)}</button>
-        </div>
+        <button class="act plb${plsOf(s).length ? ' on' : ''}" data-plpick="${s.id}">${plIcon(plsOf(s).length > 0)}플레이리스트에 담기${plsOf(s).length ? ` <small>${plsOf(s).length}곳에 있음</small>` : ''}</button>
         <a class="act yt" href="${yt}" target="_blank" rel="noopener">▶ 노래방 영상</a>
         <a class="act ytm" href="${ytm}" target="_blank" rel="noopener">🎵 유튜브 뮤직</a>
         ${random ? `<button class="act wide" data-reroll>🎲 다시 뽑기</button>` : ''}
@@ -549,9 +584,6 @@
   function currentPool() {
     if (state.drill) return drillSongs(state.drill);
     if (state.q) { const r = search(state.q); if (r && r.hits.length) return r.hits; }
-    if (state.tab === 'fav') { const p = SONGS.filter(s => s.fav); if (p.length) return p; }
-    if (state.tab === 'last') { const p = SONGS.filter(s => s.last); if (p.length) return p; }
-    if (state.tab === 'duet') { const p = SONGS.filter(s => s.duet); if (p.length) return p; }
     return sung();
   }
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -585,11 +617,11 @@
     if (!live) { toast('서버 목록을 아직 못 불러왔어요. 인터넷 연결을 확인해 주세요'); return false; }
     return true;
   }
-  const errMsg = e => /duet/.test((e && e.message) || '') ? 'supabase/duet.sql 을 먼저 실행해 주세요' : (e && e.message) ? e.message : '알 수 없는 오류';
+  const errMsg = e => /playlist/.test((e && e.message) || '') ? 'supabase/playlist.sql 을 먼저 실행해 주세요' : (e && e.message) ? e.message : '알 수 없는 오류';
 
   function afterChange(structural) {
     reindex(); saveCache();
-    if (structural || state.tab === 'fav' || state.tab === 'last' || state.tab === 'duet' || state.q) render();
+    if (structural || state.tab === 'pl' || state.q) render();
     else paintCounts();
   }
 
@@ -598,12 +630,12 @@
     for (const k in fields) prev[k] = s[k];
     Object.assign(s, fields);
     if ('t' in fields || 'a' in fields) enrich(s);
-    paintFlags(s); afterChange('sung' in fields || 't' in fields || 'a' in fields || 'g' in fields || 'art' in fields);
+    afterChange('sung' in fields || 't' in fields || 'a' in fields || 'g' in fields || 'art' in fields);
     repaintSheetIfSong(s);
     const { error } = await sb.from('songs').update(toRow(fields)).eq('id', s.id);
     if (error) {
       Object.assign(s, prev); enrich(s);
-      paintFlags(s); afterChange(true); repaintSheetIfSong(s);
+      afterChange(true); repaintSheetIfSong(s);
       toast('저장 실패: ' + errMsg(error));
       return false;
     }
@@ -614,42 +646,15 @@
     const { error } = await sb.from('songs').delete().eq('id', s.id);
     if (error) { toast('삭제 실패: ' + errMsg(error)); return false; }
     SONGS = SONGS.filter(x => x !== s);
+    for (const p of PLS) p.items = p.items.filter(it => it.sid !== String(s.id)); // 서버는 on delete cascade
+    savePls();
     afterChange(true);
     return true;
   }
 
-  // 목록의 별/막곡 버튼 즉시 갱신 (전체 리렌더 없이)
-  function paintFlags(s) {
-    document.querySelectorAll(`[data-fav="${s.id}"]`).forEach(b => {
-      b.classList.toggle('on', s.fav);
-      if (b.classList.contains('act')) b.innerHTML = tgInner('fav', s.fav); else b.textContent = s.fav ? '★' : '☆';
-    });
-    document.querySelectorAll(`[data-last="${s.id}"]`).forEach(b => {
-      b.classList.toggle('on', s.last);
-      b.innerHTML = tgInner('last', s.last);
-    });
-    document.querySelectorAll(`[data-duet="${s.id}"]`).forEach(b => {
-      b.classList.toggle('on', s.duet);
-      b.innerHTML = tgInner('duet', s.duet);
-    });
-  }
-
-  async function toggleFlag(s, flag) {
-    if (!canEdit()) return;
-    const next = !s[flag];
-    const other = ['fav', 'last', 'duet'].some(f => f !== flag && s[f]);
-    if (!next && !s.sung && !other) {
-      const ok = await ask('목록에서 지울까요?', `‘${s.t}’는 아직 안 불러본 노래라서, ${FLAG_NAME[flag]}에서 빼면 앱에서 사라져요.`, '지우기');
-      if (!ok) return;
-      if (await removeSong(s)) { if (sheetOpen && sheetMode === 'song' && curSong === s) closeSheet(); toast('지웠어요'); }
-      return;
-    }
-    if (await patch(s, { [flag]: next })) toast(next ? { fav: '찜했어요 ★', last: '막곡에 담았어요 🏁', duet: '듀엣곡에 담았어요 👥' }[flag] : { fav: '찜 해제', last: '막곡에서 뺐어요', duet: '듀엣곡에서 뺐어요' }[flag]);
-  }
-
   async function markSung(s) {
     if (!canEdit()) return;
-    const ok = await ask('전체 노래에 저장할까요?', `‘${s.t} - ${s.a}’ 불러봤으면 전체 목록에 추가할게요. 찜·막곡 표시는 그대로 남아요.`, '저장');
+    const ok = await ask('전체 노래에 저장할까요?', `‘${s.t} - ${s.a}’ 불러봤으면 전체 목록에 추가할게요. 담긴 플레이리스트는 그대로예요.`, '저장');
     if (!ok) return;
     if (await patch(s, { sung: true })) toast('🎉 전체 노래에 저장했어요');
   }
@@ -676,10 +681,8 @@
       </div>
       ${edit ? '' : `<div class="fld"><span>어디에 저장할까요?</span><div class="dest">
         <label><input type="checkbox" name="sung"${form.dest.sung ? ' checked' : ''}><i>🎤 불러봤어요<small>전체 노래</small></i></label>
-        <label><input type="checkbox" name="fav"${form.dest.fav ? ' checked' : ''}><i>☆ 찜</i></label>
-        <label><input type="checkbox" name="last"${form.dest.last ? ' checked' : ''}><i>🏁 막곡</i></label>
-        <label><input type="checkbox" name="duet"${form.dest.duet ? ' checked' : ''}><i>👥 듀엣</i></label>
-      </div><p class="hint">안 불러본 노래는 찜·막곡에만 담아두고, 부른 뒤에 “불렀어요”를 누르면 전체에 저장돼요.</p></div>`}
+        ${PLS.map(p => `<label><input type="checkbox" name="dpl" value="${p.id}"${form.dest.pls.includes(String(p.id)) ? ' checked' : ''}><i>🎶 ${esc(p.name)}</i></label>`).join('')}
+      </div><p class="hint">안 불러본 노래는 플리에만 담아두고, 부른 뒤에 “불렀어요”를 누르면 전체에 저장돼요.</p></div>`}
       <button class="act wide submit" type="submit">${edit ? '저장' : '추가하기'}</button>
       ${edit ? `<button type="button" class="danger" data-del="${s.id}">이 노래 삭제</button>` : ''}
     </form>`;
@@ -696,7 +699,7 @@
     if (!f) return;
     form.t = f.t.value; form.a = f.a.value;
     const g = f.querySelector('input[name="g"]:checked'); if (g) form.g = g.value;
-    if (f.sung) form.dest = { sung: f.sung.checked, fav: f.fav.checked, last: f.last.checked, duet: f.duet.checked };
+    if (f.sung) form.dest = { sung: f.sung.checked, pls: [...f.querySelectorAll('input[name="dpl"]:checked')].map(x => x.value) };
   }
   function paintForm() { readForm(); $('#sheetBody').innerHTML = formHTML(); }
 
@@ -704,18 +707,15 @@
     if (!canEdit()) return;
     form = { mode, song, art: song ? song.art : null, al: song ? song.al : null, y: song ? song.y : null, results: null, genreTouched: mode === 'edit' };
     if (mode === 'add') {
-      form.dest = { sung: !(ctx === 'fav' || ctx === 'last' || ctx === 'duet'), fav: ctx === 'fav', last: ctx === 'last', duet: ctx === 'duet' };
+      const pl = ctx === 'pl' && picker && picker.pl;
+      form.dest = { sung: !pl, pls: pl ? [String(pl.id)] : [] };
       if (ctx === 'search') form.t = state.q;
     }
-    if (sheetOpen && (sheetMode === 'song' || sheetMode === 'pick')) {
-      sheetMode = 'form'; $('#sheetBody').className = 'sheet-body form'; $('#sheetBg').style.cssText = 'display:none';
-      $('#sheetBody').innerHTML = formHTML(); $('.sheet-card').scrollTop = 0;
-    } else showSheet(formHTML(), '', 'form');
+    showSheet(formHTML(), '', 'form');
   }
 
-  // ---------- 찜/막곡에 담을 노래 고르기 (저장된 노래에서 검색) ----------
-  let picker = null; // { flag, q }
-  const FLAG_NAME = { fav: '찜', last: '막곡', duet: '듀엣곡' };
+  // ---------- 플리에 담을 노래 고르기 (저장된 노래에서 검색) ----------
+  let picker = null; // { pl, q }
   function pickRows() {
     const nq = normQuery(picker.q);
     let songs = nq ? SONGS.filter(s => findIn(s.ixT, nq) || findIn(s.ixA, nq)) : SONGS.slice();
@@ -724,7 +724,7 @@
     songs = songs.slice(0, 80);
     if (!songs.length) return `<p class="hint pick-empty">“${esc(picker.q)}”에 해당하는 노래가 없어요. 아래에서 새 노래로 추가할 수 있어요.</p>`;
     return songs.map(s => {
-      const on = s[picker.flag];
+      const on = inPl(picker.pl, s);
       return `<li class="row">
         <div class="thumb">${art(s.art, 120, s.a, s.t[0])}</div>
         <div class="meta"><div class="t">${esc(s.t)}</div><div class="a">${esc(s.a)}${s.sung ? '' : '<span class="chip todo">안 불러봄</span>'}</div></div>
@@ -732,17 +732,17 @@
       </li>`;
     }).join('') + (more ? `<p class="hint pick-empty">${more}곡 더 있어요. 검색어를 입력해 좁혀보세요.</p>` : '');
   }
-  function openPicker(flag) {
-    if (!canEdit()) return;
-    picker = { flag, q: '' };
+  function openPicker(pl) {
+    if (!pl || !canEditPl()) return;
+    picker = { pl, q: '' };
     showSheet(`<div class="picker">
-      <h3 class="form-h">${FLAG_NAME[flag]}에 노래 담기</h3>
+      <h3 class="form-h">‘${esc(pl.name)}’에 노래 담기</h3>
       <label class="search pick-q">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input id="pickQ" type="search" placeholder="저장된 노래에서 찾기 (초성 OK)" autocomplete="off" enterkeyhint="search">
       </label>
       <ul class="list" id="pickList">${pickRows()}</ul>
-      <button class="act wide" type="button" data-newsong="${flag}">＋ 목록에 없는 새 노래 추가</button>
+      <button class="act wide" type="button" data-newsong="pl">＋ 목록에 없는 새 노래 추가</button>
     </div>`, '', 'pick');
   }
   function paintPicker() { const ul = $('#pickList'); if (ul) ul.innerHTML = pickRows(); }
@@ -779,13 +779,143 @@
       return;
     }
     const d = form.dest;
-    if (!d.sung && !d.fav && !d.last && !d.duet) { toast('저장할 곳을 하나 이상 골라주세요'); btn.disabled = false; return; }
-    const { data, error } = await sb.from('songs').insert(toRow({ ...fields, sung: d.sung, fav: d.fav, last: d.last, ...(d.duet ? { duet: true } : {}) })).select().single();
+    if (!d.sung && !d.pls.length) { toast('저장할 곳을 하나 이상 골라주세요'); btn.disabled = false; return; }
+    const { data, error } = await sb.from('songs').insert(toRow({ ...fields, sung: d.sung })).select().single();
     if (error) { toast('추가 실패: ' + errMsg(error)); btn.disabled = false; return; }
     const s = enrich(fromRow(data));
     SONGS.push(s); afterChange(true);
-    toast(d.sung ? '🎉 전체 노래에 추가했어요' : (d.fav ? '찜에 담았어요' : d.last ? '막곡에 담았어요' : '듀엣곡에 담았어요'));
+    if (d.sung) toast('🎉 전체 노래에 추가했어요');
+    for (const id of d.pls) await plToggle(plById(id), s);
     paintSong(s, false);
+  }
+
+  // ---------- 플레이리스트 ----------
+  function canEditPl() {
+    if (!canEdit()) return false;
+    if (!plReady) { toast('supabase/playlist.sql 을 먼저 실행해 주세요'); return false; }
+    return true;
+  }
+  const nextPos = arr => arr.reduce((m, x) => Math.max(m, x.pos), -1) + 1;
+  const plChanged = s => { savePls(); if (s) paintPl(s); if (state.tab === 'pl' || (state.drill && state.drill.type === 'pl')) render(); };
+
+  function paintPl(s) {
+    const on = plsOf(s).length > 0;
+    document.querySelectorAll(`.plbtn[data-plpick="${s.id}"]`).forEach(b => { b.classList.toggle('on', on); b.innerHTML = plIcon(on); });
+    repaintSheetIfSong(s);
+  }
+
+  // 플리에 노래 넣기/빼기
+  async function plToggle(p, s) {
+    if (!p || !s || !canEditPl()) return false;
+    const sid = String(s.id);
+    if (inPl(p, s)) {
+      if (onlyIn(p, s)) {
+        const ok = await ask('목록에서 지울까요?', `‘${s.t}’는 아직 안 불러본 노래라서, 이 플레이리스트에서 빼면 앱에서 사라져요.`, '지우기');
+        if (ok && await removeSong(s)) toast('지웠어요');
+        return ok;
+      }
+      const it = p.items.find(x => x.sid === sid);
+      p.items = p.items.filter(x => x !== it); plChanged(s);
+      const { error } = await sb.from('playlist_songs').delete().eq('playlist_id', p.id).eq('song_id', s.id);
+      if (error) {
+        p.items.push(it); p.items.sort((x, y) => x.pos - y.pos); plChanged(s);
+        toast('저장 실패: ' + errMsg(error)); return false;
+      }
+      toast(`‘${p.name}’에서 뺐어요`);
+      return true;
+    }
+    const it = { sid, pos: nextPos(p.items) };
+    p.items.push(it); plChanged(s);
+    const { error } = await sb.from('playlist_songs').insert({ playlist_id: p.id, song_id: s.id, position: it.pos });
+    if (error) { p.items = p.items.filter(x => x !== it); plChanged(s); toast('저장 실패: ' + errMsg(error)); return false; }
+    toast(`‘${p.name}’에 담았어요 🎶`);
+    return true;
+  }
+
+  // 순서 바꾸기: 옆 노래와 position 을 맞바꿔요
+  async function plMove(p, sid, dir) {
+    if (!p || !canEditPl()) return;
+    const i = p.items.findIndex(it => it.sid === sid), j = i + dir;
+    if (i < 0 || j < 0 || j >= p.items.length) return;
+    const a = p.items[i], b = p.items[j];
+    [a.pos, b.pos] = [b.pos, a.pos];
+    if (a.pos === b.pos) b.pos += dir; // 같은 position 이 겹쳐 있던 경우
+    p.items[i] = b; p.items[j] = a;
+    plChanged();
+    const { error } = await sb.from('playlist_songs').upsert([a, b].map(it => ({ playlist_id: p.id, song_id: +it.sid, position: it.pos })));
+    if (error) { toast('저장 실패: ' + errMsg(error)); refresh(); }
+  }
+
+  let plForm = null; // { mode: 'new' | 'rename', pl, song } — song 이 있으면 만들고 바로 담기
+  function openPlForm(mode, pl, song) {
+    if (!canEditPl()) return;
+    plForm = { mode, pl, song };
+    showSheet(`<form id="plForm" autocomplete="off">
+      <h3 class="form-h">${mode === 'rename' ? '이름 바꾸기' : '새 플레이리스트'}</h3>
+      <label class="fld"><span>이름</span><input name="plname" required maxlength="40" value="${esc(pl ? pl.name : '')}" placeholder="예) 오늘 코노, 고음 연습"></label>
+      ${song ? `<p class="hint">만들면 ‘${esc(song.t)}’도 바로 담아요.</p>` : ''}
+      <button class="act wide submit" type="submit">${mode === 'rename' ? '저장' : '만들기'}</button>
+    </form>`, '', 'form');
+    setTimeout(() => { const i = $('#plForm input'); if (i) i.focus(); }, 250);
+  }
+
+  async function submitPlForm(f) {
+    const name = f.plname.value.trim();
+    if (!name) return;
+    const btn = f.querySelector('.submit'); btn.disabled = true;
+    if (plForm.mode === 'rename') {
+      const p = plForm.pl;
+      const { error } = await sb.from('playlists').update({ name }).eq('id', p.id);
+      if (error) { toast('저장 실패: ' + errMsg(error)); btn.disabled = false; return; }
+      p.name = name; plChanged(); closeSheet(); toast('이름을 바꿨어요');
+      return;
+    }
+    const { data, error } = await sb.from('playlists').insert({ name, position: nextPos(PLS) }).select().single();
+    if (error) { toast('만들기 실패: ' + errMsg(error)); btn.disabled = false; return; }
+    const p = { id: data.id, name: data.name, pos: data.position, items: [] };
+    PLS.push(p); plChanged();
+    if (plForm.song) { await plToggle(p, plForm.song); openPlPick(plForm.song); return; }
+    closeSheet(); toast('만들었어요 🎶');
+    setTimeout(() => openDrill({ type: 'pl', key: String(p.id) }), 60);
+  }
+
+  async function deletePl(p) {
+    if (!p || !canEditPl()) return;
+    const orphans = plSongs(p).filter(s => onlyIn(p, s));
+    const ok = await ask('플레이리스트를 삭제할까요?', `‘${p.name}’를 지워요. 노래는 그대로 남아요.`
+      + (orphans.length ? ` 단, 여기에만 담긴 안 불러본 노래 ${orphans.length}곡은 같이 지워져요.` : ''), '삭제');
+    if (!ok) return;
+    const { error } = await sb.from('playlists').delete().eq('id', p.id);
+    if (error) { toast('삭제 실패: ' + errMsg(error)); return; }
+    PLS = PLS.filter(x => x !== p); savePls();
+    history.back();
+    for (const s of orphans) await removeSong(s);
+    toast('삭제했어요');
+  }
+
+  // 노래 상세 → 어느 플리에 담을지 고르기
+  let plPickSong = null;
+  function plPickHTML(s) {
+    return `<div class="picker">
+      <h3 class="form-h">플레이리스트에 담기</h3>
+      <p class="hint pl-for">${esc(s.t)} · ${esc(s.a)}</p>
+      ${PLS.length ? `<ul class="list">${PLS.map(p => {
+        const on = inPl(p, s);
+        return `<li class="row">
+          <div class="thumb">${plCover(p, 120)}</div>
+          <div class="meta"><div class="t">${esc(p.name)}</div><div class="a">${plSongs(p).length}곡</div></div>
+          <button class="pickadd${on ? ' on' : ''}" data-pltg="${p.id}">${on ? '담김 ✓' : '＋ 담기'}</button>
+        </li>`;
+      }).join('')}</ul>` : '<p class="hint pick-empty">아직 플레이리스트가 없어요. 새로 만들어 보세요.</p>'}
+      <div class="pl-acts">
+        <button class="act" type="button" data-plnew data-for="${s.id}">＋ 새 플레이리스트</button>
+        <button class="act wide" type="button" data-song="${s.id}">완료</button>
+      </div></div>`;
+  }
+  function openPlPick(s) {
+    if (!canEditPl()) return;
+    plPickSong = s;
+    showSheet(plPickHTML(s), '', 'pick');
   }
 
   // ---------- 로그인 ----------
@@ -802,9 +932,8 @@
       </label>
       <div class="pf-stats">
         <div><b>${sung().length}</b><small>불러본 노래</small></div>
-        <div><b>${SONGS.filter(s => s.fav).length}</b><small>찜</small></div>
-        <div><b>${SONGS.filter(s => s.last).length}</b><small>막곡</small></div>
-        <div><b>${SONGS.filter(s => s.duet).length}</b><small>듀엣</small></div>
+        <div><b>${PLS.length}</b><small>플레이리스트</small></div>
+        <div><b>${SONGS.length - sung().length}</b><small>안 불러본 노래</small></div>
       </div>
       <button class="logout" type="button" data-logout>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/></svg>
@@ -827,9 +956,6 @@
     if (!t || t.closest('#dialog')) return;
     const d = t.dataset;
     if (d.tab) goTab(d.tab);
-    else if (d.fav) toggleFlag(BY_ID.get(d.fav), 'fav');
-    else if (d.last) toggleFlag(BY_ID.get(d.last), 'last');
-    else if (d.duet) toggleFlag(BY_ID.get(d.duet), 'duet');
     else if (d.sang) markSung(BY_ID.get(d.sang));
     else if (d.song) paintSong(BY_ID.get(d.song), false);
     else if (d.artist) {
@@ -837,17 +963,40 @@
       if (sheetOpen) { closeSheet(); setTimeout(() => openDrill(dr), 60); } else openDrill(dr);
     }
     else if (d.genre) openDrill({ type: 'genre', key: d.genre });
+    else if (d.pl) openDrill({ type: 'pl', key: d.pl });
+    else if ('plnew' in d) openPlForm('new', null, d.for ? BY_ID.get(d.for) : null);
+    else if (d.pladd) openPicker(plById(d.pladd));
+    else if ('plorder' in d) { state.plEdit = !state.plEdit; render(); }
+    else if (d.plrename) openPlForm('rename', plById(d.plrename));
+    else if (d.pldel) deletePl(plById(d.pldel));
+    else if (d.plmv) plMove(plById(state.drill && state.drill.key), d.sid, +d.plmv);
+    else if (d.plrm) plToggle(plById(state.drill && state.drill.key), BY_ID.get(d.plrm));
+    else if (d.plpick) openPlPick(BY_ID.get(d.plpick));
+    else if (d.pltg) {
+      const s = plPickSong;
+      t.disabled = true;
+      plToggle(plById(d.pltg), s).then(() => {
+        if (sheetMode !== 'pick' || plPickSong !== s) return;
+        if (!BY_ID.has(String(s.id))) closeSheet(); // 지운 노래
+        else $('#sheetBody').innerHTML = plPickHTML(s);
+      });
+    }
     else if (d.asort) { state.artistSort = d.asort; LS.set('kono.artistSort2', state.artistSort); render(); }
     else if ('back' in d) history.back();
     else if ('dice' in d || t.id === 'dice') roll();
     else if ('reroll' in d) roll();
-    else if (d.add) PICKED[d.add] ? openPicker(d.add) : openForm('add', null, d.add);
-    else if (t.id === 'addBtn') PICKED[state.tab] && !state.q && !state.drill ? openPicker(state.tab) : openForm('add', null, state.tab);
+    else if (d.add) openForm('add', null, d.add);
+    else if (t.id === 'addBtn') {
+      const top = !state.q && !state.drill;
+      if (state.drill && state.drill.type === 'pl' && !state.q) openPicker(plById(state.drill.key));
+      else if (top && state.tab === 'pl') openPlForm('new');
+      else openForm('add', null, state.tab);
+    }
     else if (d.newsong) openForm('add', null, d.newsong);
     else if (d.pickadd) {
       const s = BY_ID.get(d.pickadd);
       t.disabled = true;
-      toggleFlag(s, picker.flag).then(() => { if (sheetMode === 'pick') paintPicker(); });
+      plToggle(picker.pl, s).then(() => { if (sheetMode === 'pick') paintPicker(); });
     }
     else if (t.id === 'acctBtn') openLogin();
     else if (d.edit) openForm('edit', BY_ID.get(d.edit));
@@ -872,6 +1021,7 @@
   document.addEventListener('submit', async e => {
     e.preventDefault();
     if (e.target.id === 'songForm') submitForm();
+    else if (e.target.id === 'plForm') submitPlForm(e.target);
     else if (e.target.id === 'loginForm') {
       const f = e.target, btn = f.querySelector('.submit');
       btn.disabled = true;
@@ -939,20 +1089,41 @@
   }
 
   // ---------- 서버 동기화 ----------
-  async function refresh() {
+  // 한 번에 1000줄까지만 오니까 나눠서 받기
+  async function fetchAll(table, cols, orders) {
     const all = [];
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await sb.from('songs').select('*').order('id').range(from, from + 999);
-      if (error) {
-        if (!live) toast('오프라인 — 저장된 목록을 보여줘요');
-        return;
-      }
+      let q = sb.from(table).select(cols);
+      for (const o of orders) q = q.order(o);
+      const { data, error } = await q.range(from, from + 999);
+      if (error) return { error };
       all.push(...data);
-      if (data.length < 1000) break;
+      if (data.length < 1000) return { data: all };
+    }
+  }
+
+  async function refresh() {
+    const [r, pr, sr] = await Promise.all([
+      fetchAll('songs', '*', ['id']),
+      fetchAll('playlists', 'id,name,position', ['position', 'id']),
+      fetchAll('playlist_songs', 'playlist_id,song_id,position', ['playlist_id', 'position', 'song_id']),
+    ]);
+    if (r.error) {
+      if (!live) toast('오프라인 — 저장된 목록을 보여줘요');
+      return;
     }
     live = true;
-    setData(all.map(fromRow));
+    setData(r.data.map(fromRow));
     saveCache();
+    if (!pr.error && !sr.error) {
+      PLS = pr.data.map(x => ({ id: x.id, name: x.name, pos: x.position, items: [] }));
+      const byId = new Map(PLS.map(p => [p.id, p]));
+      for (const x of sr.data) {
+        const p = byId.get(x.playlist_id);
+        if (p && BY_ID.has(String(x.song_id))) p.items.push({ sid: String(x.song_id), pos: x.position });
+      }
+      plReady = true; savePls();
+    }
     const m = await sb.from('meta').select('key,value');
     if (!m.error) { meta = Object.fromEntries(m.data.map(r => [r.key, r.value])); LS.set('kono.meta', meta); }
     if (!sheetOpen || sheetMode !== 'form') render();
@@ -976,8 +1147,12 @@
 
   // ---------- 시작 ----------
   const cached = sb ? LS.get('kono.cache', null) : null;
-  if (cached && cached.length) { setData(cached); live = true; }
-  else setData((window.SONGS || []).map((s, i) => ({ id: 's' + i, ...s, sung: true, fav: false, last: false, duet: false })));
+  if (cached && cached.length) {
+    setData(cached); live = true;
+    const pls = LS.get('kono.pl', null);
+    if (pls) { PLS = pls; plReady = true; }
+  }
+  else setData((window.SONGS || []).map((s, i) => ({ id: 's' + i, ...s, sung: true })));
 
   history.replaceState(snapshot(), '');
   measureHeader();
