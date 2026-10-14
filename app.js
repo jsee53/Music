@@ -191,7 +191,7 @@
   const plIcon = on => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11M4 11h11M4 16h7"/>${on ? '<path d="M14 17l2.5 2.5L21 15"/>' : '<path d="M18 13v7M14.5 16.5h7"/>'}</svg>`;
   function plBtn(s) {
     const on = plsOf(s).length > 0;
-    return `<button class="plbtn${on ? ' on' : ''}" data-plpick="${s.id}" aria-label="플리에 담기">${plIcon(on)}</button>`;
+    return `<button class="plbtn${on ? ' on' : ''}" data-plpick="${s.id}" aria-label="플레이리스트에 담기">${plIcon(on)}</button>`;
   }
   const list = (songs, ms) => `<ul class="list">${songs.map(s => row(s, ms && ms.get(s))).join('')}</ul>`;
 
@@ -258,7 +258,7 @@
     if (!plReady) return `<div class="empty"><span class="big">🎶</span>플레이리스트를 쓰려면 Supabase SQL Editor 에서<br><b>supabase/playlist.sql</b> 을 한 번 실행해 주세요.</div>`;
     if (!PLS.length) return `<div class="empty"><span class="big">🎶</span>아직 플레이리스트가 없어요.<br>오늘 부를 노래, 분위기별 묶음을 만들어 보세요.
       <br><button class="mini" data-plnew style="margin-top:14px">＋ 새 플레이리스트</button></div>`;
-    return `<div class="toolbar"><span>플레이리스트 ${PLS.length}개</span><button class="mini" data-plnew>＋ 새 플리</button></div>
+    return `<div class="toolbar"><span>플레이리스트 ${PLS.length}개</span><button class="mini" data-plnew>＋ 새 플레이리스트</button></div>
       <div class="pls">${PLS.map(p => `<button class="plc" data-pl="${p.id}">
         <div class="plc-cv">${plCover(p, 300)}</div>
         <div class="n">${esc(p.name)}</div><div class="c">${plSongs(p).length}곡</div></button>`).join('')}</div>`;
@@ -270,7 +270,7 @@
       <div class="meta"><div class="t">${esc(s.t)}</div><div class="a">${esc(s.a)}</div></div>
       <button class="mv" data-plmv="-1" data-sid="${s.id}"${i ? '' : ' disabled'} aria-label="위로">▲</button>
       <button class="mv" data-plmv="1" data-sid="${s.id}"${i < n - 1 ? '' : ' disabled'} aria-label="아래로">▼</button>
-      <button class="mv rm" data-plrm="${s.id}" aria-label="플리에서 빼기">✕</button>
+      <button class="mv rm" data-plrm="${s.id}" aria-label="플레이리스트에서 빼기">✕</button>
     </li>`;
   }
 
@@ -279,12 +279,12 @@
     let html = hero({
       title: p.name, sub: `플레이리스트 · ${songs.length}곡`, cover: plCover(p, 300),
       bg: first ? `background-image:url('${esc(size(first.art, 200))}')` : `background:hsl(${hue(p.name)} 70% 45%)`,
-      pickLabel: '이 플리에서 뽑기',
+      pickLabel: '이 플레이리스트에서 뽑기',
     });
     html += state.plEdit
       ? `<div class="pl-tools"><button class="mini on" data-plorder>✓ 완료</button>
           <button class="mini" data-plrename="${p.id}">✏️ 이름 바꾸기</button>
-          <button class="mini warn" data-pldel="${p.id}">🗑 플리 삭제</button></div>`
+          <button class="mini warn" data-pldel="${p.id}">🗑 플레이리스트 삭제</button></div>`
       : `<div class="pl-tools"><button class="mini" data-pladd="${p.id}">＋ 노래 담기</button>
           <button class="mini" data-plorder>편집</button></div>`;
     if (!songs.length) return html + `<div class="empty">아직 담긴 노래가 없어요.<br><b>＋ 노래 담기</b>로 채워 보세요.</div>`;
@@ -682,7 +682,7 @@
       ${edit ? '' : `<div class="fld"><span>어디에 저장할까요?</span><div class="dest">
         <label><input type="checkbox" name="sung"${form.dest.sung ? ' checked' : ''}><i>🎤 불러봤어요<small>전체 노래</small></i></label>
         ${PLS.map(p => `<label><input type="checkbox" name="dpl" value="${p.id}"${form.dest.pls.includes(String(p.id)) ? ' checked' : ''}><i>🎶 ${esc(p.name)}</i></label>`).join('')}
-      </div><p class="hint">안 불러본 노래는 플리에만 담아두고, 부른 뒤에 “불렀어요”를 누르면 전체에 저장돼요.</p></div>`}
+      </div><p class="hint">안 불러본 노래는 플레이리스트에만 담아두고, 부른 뒤에 “불렀어요”를 누르면 전체에 저장돼요.</p></div>`}
       <button class="act wide submit" type="submit">${edit ? '저장' : '추가하기'}</button>
       ${edit ? `<button type="button" class="danger" data-del="${s.id}">이 노래 삭제</button>` : ''}
     </form>`;
